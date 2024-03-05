@@ -1,11 +1,10 @@
 # MUVO
-This is PyTorch implementation for 
+This is the PyTorch implementation for the paper
 > MUVO: A Multimodal Generative World Model for Autonomous Driving with Geometric Representations. <br/>
-
 
 ## Requirements
 The simplest way to install all required dependencies is to create 
-a [conda](https://docs.conda.io/projects/miniconda/en/latest/) enviroment by running
+a [conda](https://docs.conda.io/projects/miniconda/en/latest/) environment by running
 ```
 conda env create -f conda_env.yml
 ```
@@ -39,7 +38,7 @@ voxel settings can be changed in `data_preprocess.yaml`.
 After completing the above steps, or otherwise obtaining the dataset,
 please change the file structure of the dataset. <br/>
 
-The data is organized in the following format
+The main branch includes most of the results presented in the paper. In the 2D branch, you can find 2D latent states, perceptual losses, and a new transformer backbone. The data is organized in the following format
 ```
 /carla_dataset/trainval/
                    ├── train/
