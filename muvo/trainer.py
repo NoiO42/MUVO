@@ -9,8 +9,10 @@ from torchmetrics import JaccardIndex
 
 from muvo.config import get_cfg
 from muvo.models.mile import Mile
+from muvo.models.muvo import MUVO
 from muvo.losses import \
-    SegmentationLoss, KLLoss, RegressionLoss, SpatialRegressionLoss, VoxelLoss, SSIMLoss, SemScalLoss, GeoScalLoss
+    SegmentationLoss, KLLoss, RegressionLoss, SpatialRegressionLoss, VoxelLoss, SSIMLoss, SemScalLoss, GeoScalLoss, \
+    DiceLoss, PerceptualLoss
 from muvo.metrics import SSCMetrics, SSIMMetric, CDMetric, PSNRMetric
 from muvo.models.preprocess import PreProcess
 from muvo.utils.geometry_utils import PointCloud, compute_pcd_transformation
@@ -40,7 +42,8 @@ class WorldModelTrainer(pl.LightningModule):
         self.preprocess = PreProcess(self.cfg)
 
         # Model
-        self.model = Mile(self.cfg)
+        # self.model = Mile(self.cfg)
+        self.model = MUVO(self.cfg) if self.cfg.MODEL.TRANSFORMER_TRANSITION.ENABLED else Mile(self.cfg)
         self.load_pretrained_weights()
 
         # self.metrics_vals = [dict() for _ in range(len(self.val_dataloader()))]
@@ -96,6 +99,11 @@ class WorldModelTrainer(pl.LightningModule):
                 self.rgb_instance_loss = SpatialRegressionLoss(norm=1)
             if self.cfg.LOSSES.SSIM:
                 self.ssim_loss = SSIMLoss(channel=3)
+            if self.cfg.LOSSES.PERCEPTUAL.ENABLED:
+                self.perceptual_loss = PerceptualLoss(
+                    norm=2, model=self.cfg.LOSSES.PERCEPTUAL.MODEL,
+                    mean=self.cfg.IMAGE.IMAGENET_MEAN, std=self.cfg.IMAGE.IMAGENET_STD
+                )
 
             for metrics_val, metrics_val_imagine in zip(self.metrics_vals, self.metrics_vals_imagine):
                 metrics_val['ssim'] = SSIMMetric(channel=3)
@@ -181,19 +189,24 @@ class WorldModelTrainer(pl.LightningModule):
             self.depth_image_loss = SpatialRegressionLoss(norm=1)
 
         if self.cfg.VOXEL_SEG.ENABLED:
-            self.voxel_loss = VoxelLoss(
-                use_top_k=self.cfg.VOXEL_SEG.USE_TOP_K,
-                top_k_ratio=self.cfg.VOXEL_SEG.TOP_K_RATIO,
-                use_weights=self.cfg.VOXEL_SEG.USE_WEIGHTS,
-            )
-            self.sem_scal_loss = SemScalLoss()
+            # self.voxel_loss = VoxelLoss(
+            #     use_top_k=self.cfg.VOXEL_SEG.USE_TOP_K,
+            #     top_k_ratio=self.cfg.VOXEL_SEG.TOP_K_RATIO,
+            #     use_weights=self.cfg.VOXEL_SEG.USE_WEIGHTS,
+            # )
+            # self.sem_scal_loss = SemScalLoss()
             self.geo_scal_loss = GeoScalLoss()
+            # self.dice_loss = DiceLoss(eps=1)
             for metrics_val, metrics_val_imagine in zip(self.metrics_vals, self.metrics_vals_imagine):
                 metrics_val['ssc'] = SSCMetrics(self.cfg.VOXEL_SEG.N_CLASSES)
                 metrics_val_imagine['ssc'] = SSCMetrics(self.cfg.VOXEL_SEG.N_CLASSES)
+                metrics_val['ssc_inner'] = SSCMetrics(self.cfg.VOXEL_SEG.N_CLASSES)
+                metrics_val_imagine['ssc_inner'] = SSCMetrics(self.cfg.VOXEL_SEG.N_CLASSES)
             for metrics_test, metrics_test_imagine in zip(self.metrics_tests, self.metrics_tests_imagine):
                 metrics_test['ssc'] = SSCMetrics(self.cfg.VOXEL_SEG.N_CLASSES)
                 metrics_test_imagine['ssc'] = SSCMetrics(self.cfg.VOXEL_SEG.N_CLASSES)
+                metrics_test['ssc_inner'] = SSCMetrics(self.cfg.VOXEL_SEG.N_CLASSES)
+                metrics_test_imagine['ssc_inner'] = SSCMetrics(self.cfg.VOXEL_SEG.N_CLASSES)
             # self.metrics_train['ssc'] = SSCMetrics(self.cfg.VOXEL_SEG.N_CLASSES)
 
     def get_cml_logger(self, cml_logger):
@@ -314,8 +327,17 @@ class WorldModelTrainer(pl.LightningModule):
                         prediction=output[f'rgb_{downsampling_factor}'],
                         target=batch[f'rgb_label_{downsampling_factor}'],
                     )
-                    ssim_weight = 0.6
+                    ssim_weight = 0.3
                     losses[f'ssim_{downsampling_factor}'] = rgb_weight * discount * ssim_loss * ssim_weight
+
+                if self.cfg.LOSSES.PERCEPTUAL.ENABLED:
+                    perceptual_loss = self.perceptual_loss(
+                        prediction=output[f'rgb_{downsampling_factor}'],
+                        target=batch[f'rgb_label_{downsampling_factor}'],
+                    )
+                    perceptual_weight = 1
+                    losses[f'perceptual_{downsampling_factor}'] = \
+                        rgb_weight * discount * perceptual_loss * perceptual_weight
 
                 losses[f'rgb_{downsampling_factor}'] = \
                     rgb_weight * discount * (rgb_loss + 0.5 * rgb_instance_loss)
@@ -368,21 +390,26 @@ class WorldModelTrainer(pl.LightningModule):
         if self.cfg.VOXEL_SEG.ENABLED:
             for downsampling_factor in [1, 2, 4]:
                 discount = 1 / downsampling_factor
-                voxel_loss = self.voxel_loss(
-                    prediction=output[f'voxel_{downsampling_factor}'],
-                    target=batch[f'voxel_label_{downsampling_factor}'].type(torch.long)
-                )
-                sem_scal_loss = self.sem_scal_loss(
-                    prediction=output[f'voxel_{downsampling_factor}'],
-                    target=batch[f'voxel_label_{downsampling_factor}']
-                )
+                # voxel_loss = self.voxel_loss(
+                #     prediction=output[f'voxel_{downsampling_factor}'],
+                #     target=batch[f'voxel_label_{downsampling_factor}'].type(torch.long)
+                # )
+                # sem_scal_loss = self.sem_scal_loss(
+                #     prediction=output[f'voxel_{downsampling_factor}'],
+                #     target=batch[f'voxel_label_{downsampling_factor}']
+                # )
                 geo_scal_loss = self.geo_scal_loss(
                     prediction=output[f'voxel_{downsampling_factor}'],
                     target=batch[f'voxel_label_{downsampling_factor}']
                 )
-                losses[f'voxel_{downsampling_factor}'] = discount * self.cfg.LOSSES.WEIGHT_VOXEL * voxel_loss
-                losses[f'sem_scal_{downsampling_factor}'] = discount * self.cfg.LOSSES.WEIGHT_VOXEL * sem_scal_loss
+                # dice_loss = self.dice_loss(
+                #     prediction=output[f'voxel_{downsampling_factor}'],
+                #     target=batch[f'voxel_label_{downsampling_factor}']
+                # )
+                # losses[f'voxel_{downsampling_factor}'] = discount * self.cfg.LOSSES.WEIGHT_VOXEL * voxel_loss
+                # losses[f'sem_scal_{downsampling_factor}'] = discount * self.cfg.LOSSES.WEIGHT_VOXEL * sem_scal_loss
                 losses[f'geo_scal_{downsampling_factor}'] = discount * self.cfg.LOSSES.WEIGHT_VOXEL * geo_scal_loss
+                # losses[f'dice_{downsampling_factor}'] = discount * self.cfg.LOSSES.WEIGHT_VOXEL * dice_loss
 
         if self.cfg.MODEL.REWARD.ENABLED:
             reward_loss = self.action_loss(output['reward'], batch['reward'])
@@ -402,13 +429,13 @@ class WorldModelTrainer(pl.LightningModule):
         return self.loss_reducing(losses)
 
     def validation_step(self, batch, batch_idx, dataloader_idx):
-        self.train()
-        for module in self.modules():
+        self.model.train()
+        for module in self.model.modules():
             if isinstance(module, torch.nn.Dropout):
                 module.eval()
         with torch.no_grad():
             loss, output, loss_imagines, output_imagines = self.shared_step(batch, mode='val', predict_action=False)
-        self.eval()
+        self.model.eval()
 
         batch_rf = {key: value[:, :self.rf] for key, value in batch.items()}  # dim (b, s, 512)
         batch_fh = {key: value[:, self.rf:] for key, value in batch.items()}  # dim (b, s, 512)
@@ -479,6 +506,7 @@ class WorldModelTrainer(pl.LightningModule):
 
         if self.cfg.VOXEL_SEG.ENABLED:
             self.compute_ssc_metrics(batch, output, metrics['ssc'])
+            self.compute_ssc_metrics_inner(batch, output, metrics['ssc_inner'])
 
     def compute_ssc_metrics(self, batch, output, metric):
         y_true = batch['voxel_label_1']
@@ -488,6 +516,15 @@ class WorldModelTrainer(pl.LightningModule):
         y_true = y_true.reshape(b * s, x, y, z)
         y_pred = torch.argmax(y_pred, dim=1)
         metric.add_batch(y_pred, y_true)
+
+    def compute_ssc_metrics_inner(self, batch, output, metric):
+        y_true = batch['voxel_label_1']
+        y_pred = output['voxel_1'].detach()
+        b, s, c, x, y, z = y_pred.shape
+        y_pred_ = y_pred.reshape(b * s, c, x, y, z)[:, :, 48: 144, 48: 144, 8: 24]
+        y_true_ = y_true.reshape(b * s, x, y, z)[:, 48: 144, 48: 144, 8: 24]
+        y_pred_ = torch.argmax(y_pred_, dim=1)
+        metric.add_batch(y_pred_, y_true_)
 
     def logging_and_visualisation(self, batch, output, output_imagine, loss, loss_imagines, batch_idx, prefix='train'):
         # Logging
@@ -536,7 +573,8 @@ class WorldModelTrainer(pl.LightningModule):
                 metrics['psnr'].reset()
 
             if self.cfg.LIDAR_RE.ENABLED:
-                self.log(f'{prefix}_chamfer_distance', metrics['cd'].get_stat())
+                self.log(f'{prefix}_chamfer_distance', metrics['cd'].get_stat()[0])
+                self.log(f'{prefix}_chamfer_distance_nearfield', metrics['cd'].get_stat()[1])
                 metrics['cd'].reset()
 
             if self.cfg.LIDAR_SEG.ENABLED:
@@ -558,13 +596,21 @@ class WorldModelTrainer(pl.LightningModule):
                 #                      'Pedestrian', 'TrafficSign', 'TrafficLight', 'Others']
 
                 stats = metrics['ssc'].get_stats()
+                stats_ = metrics['ssc_inner'].get_stats()
                 for i, class_name in enumerate(class_names_voxel):
                     self.log(f'{prefix}_Voxel_{class_name}_SemIoU', stats['iou_ssc'][i])
+                    self.log(f'{prefix}_Voxel_{class_name}_SemIoU_nearfield', stats_['iou_ssc'][i])
                 self.log(f'{prefix}_Voxel_mIoU', stats["iou_ssc_mean"])
                 self.log(f'{prefix}_Voxel_IoU', stats["iou"])
                 self.log(f'{prefix}_Voxel_Precision', stats["precision"])
                 self.log(f'{prefix}_Voxel_Recall', stats["recall"])
                 metrics['ssc'].reset()
+
+                self.log(f'{prefix}_Voxel_mIoU_nearfield', stats_["iou_ssc_mean"])
+                self.log(f'{prefix}_Voxel_IoU_nearfield', stats_["iou"])
+                self.log(f'{prefix}_Voxel_Precision_nearfield', stats_["precision"])
+                self.log(f'{prefix}_Voxel_Recall_nearfield', stats_["recall"])
+                metrics['ssc_inner'].reset()
 
     def visualise(self, batch, output, output_imagines, batch_idx, prefix='train', writer=None):
         writer = writer if writer else self.logger.experiment
@@ -852,7 +898,7 @@ class WorldModelTrainer(pl.LightningModule):
                 lidar_seg_imagines.append(None)
 
             colours = torch.tensor(VOXEL_COLOURS, dtype=torch.uint8, device=lidar_seg_pred.device) / 255.0
-            
+
             lidar_seg_target = colours[lidar_seg_target]
             lidar_seg_target = F.pad(lidar_seg_target.permute(0, 1, 4, 2, 3), [3, 3, 3, 3], 'constant', 0.8)
 
@@ -1077,19 +1123,34 @@ class WorldModelTrainer(pl.LightningModule):
         self.log_metrics(self.metrics_tests_imagine, 'test_imagine')
 
     def test_step(self, batch, batch_idx, dataloader_idx):
-        self.train()
-        for module in self.modules():
+        self.model.train()
+        for module in self.model.modules():
             if isinstance(module, torch.nn.Dropout):
                 module.eval()
-        with torch.no_grad():
-            loss, output, loss_imagines, output_imagines = self.shared_step(batch, mode='test', predict_action=False)
-        self.eval()
 
-        batch_rf = {key: value[:, :self.rf] for key, value in batch.items()}  # dim (b, s, 512)
-        batch_fh = {key: value[:, self.rf:] for key, value in batch.items()}  # dim (b, s, 512)
+        output_imagines = []
+        with torch.no_grad():
+            batch = self.preprocess(batch)
+            batch_rf = {key: value[:, :self.rf] for key, value in batch.items()}  # dim (b, s, 512)
+            batch_fh = {key: value[:, self.rf:] for key, value in batch.items()}  # dim (b, s, 512)
+            output, state_dict = self.model.forward(batch_rf, deployment=False)
+
+            # in evaluation, do imagination (prediction)
+            state_imagine = {'hidden_state': state_dict['posterior']['hidden_state'][:, -1],
+                             'sample': state_dict['posterior']['sample'][:, -1],
+                             'throttle_brake': batch['throttle_brake'][:, self.rf:],
+                             'steering': batch['steering'][:, self.rf:]}
+            for _ in range(1):
+                output_imagine = self.model.imagine(state_imagine, predict_action=False, future_horizon=self.fh)
+                output_imagines.append(output_imagine)
+
+        self.model.eval()
+
+        # batch_rf = {key: value[:, :self.rf] for key, value in batch.items()}  # dim (b, s, 512)
+        # batch_fh = {key: value[:, self.rf:] for key, value in batch.items()}  # dim (b, s, 512)
         self.add_metrics(self.metrics_tests[dataloader_idx], batch_rf, output)
         for output_imagine in output_imagines:
             self.add_metrics(self.metrics_tests_imagine[dataloader_idx], batch_fh, output_imagine)
 
-        self.visualise(batch, output, output_imagines, batch_idx, prefix=f'pred{dataloader_idx}')
+        # self.visualise(batch, output, output_imagines, batch_idx, prefix=f'pred{dataloader_idx}')
         return output, output_imagines

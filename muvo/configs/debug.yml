@@ -27,7 +27,7 @@ SEMANTIC_SEG:
 
 VOXEL_SEG:
   ENABLED: True
-  DIMENSION: 64
+  DIMENSION: 32
   N_CLASSES: 2
   USE_WEIGHTS: False
 
@@ -50,10 +50,16 @@ DEPTH:
 LOSSES:
   RGB_INSTANCE: False
   SSIM: False
+  PERCEPTUAL:
+    ENABLED: False
+    MODEL: 'resnet18'
 
 MODEL:
+  TRANSFORMER_TRANSITION:
+    ENABLED: True
   EMBEDDING_DIM: 512
   TRANSFORMER:
+    CHANNELS: 192
     ENABLED: True
     BEV: False
     LARGE: False
@@ -63,15 +69,16 @@ MODEL:
 
 EVAL:
   RGB_SUPERVISION: True
+  NO_LIFTING: False
 
-RECEPTIVE_FIELD: 2
-FUTURE_HORIZON: 1
+RECEPTIVE_FIELD: 1
+FUTURE_HORIZON: 0
 
 PRETRAINED:
 #  PATH: 'weights/epoch=37-step=57600.ckpt'
 #  PATH: 'weights/epoch=65-step=99000.ckpt'
-  PATH: 'weights/epoch=3-step=50000.ckpt'
-#  PATH: ''
+#  PATH: 'weights/epoch=3-step=50000.ckpt'
+  PATH: ''
 #
 #DATASET:
 #  DATAROOT: ''

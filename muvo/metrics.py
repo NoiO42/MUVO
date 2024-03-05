@@ -5,7 +5,7 @@ Part of the code is taken from https://github.com/waterljwant/SSC/blob/master/ss
 """
 # import numpy as np
 import torch
-from chamferdist import ChamferDistance
+# from chamferdist import ChamferDistance
 # from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 
 from muvo.losses import SSIMLoss, CDLoss
@@ -113,11 +113,11 @@ class SSCMetrics:
 
     def get_stats(self):
         return {
-            "precision": self.precision,
-            "recall": self.recall,
-            "iou": self.iou,
+            "precision": float(self.precision),
+            "recall": float(self.recall),
+            "iou": float(self.iou),
             "iou_ssc": self.iou_ssc,
-            "iou_ssc_mean": torch.mean(self.iou_ssc[1:]),
+            "iou_ssc_mean": float(torch.mean(self.iou_ssc[1:])),
         }
 
     def reset(self):
@@ -227,7 +227,7 @@ class SSIMMetric:
         self.ssim_avg = self.ssim_score / self.count
 
     def get_stat(self):
-        return self.ssim_avg
+        return float(self.ssim_avg)
 
     def reset(self):
         self.ssim_score = 0
@@ -243,53 +243,114 @@ class CDMetric:
     def add_batch(self, prediction, target):
         self.count += 1
         # dist = CDLoss.batch_pairwise_dist(prediction.float(), target.float()).cpu().numpy()
-        dist = torch.cdist(prediction.float(), target.float(), 2)
-        dl, dr = dist.min(1)[0], dist.min(2)[0]
-        cost = (self.reducer(dl, dim=1) + self.reducer(dr, dim=1)) / 2
-        self.total_cost += cost.mean()
-        self.avg_cost = self.total_cost / self.count
-
-    def get_stat(self):
-        return self.avg_cost
-
-    def reset(self):
-        self.total_cost = 0
-        self.count = 1e-8
-        self.avg_cost = 0
-
-
-class CDMetric0:
-    def __init__(self):
-        self.chamferDist = ChamferDistance()
-        self.reset()
-
-    def add_batch(self, prediction, target, valid_pred, valid_target):
-        self.count += 1
         b = prediction.shape[0]
         cdist = 0
+        cdist_in = 0
         for i in range(b):
-            # cdist += 0.5 * self.chamferDist(prediction[i][valid_pred[i]][None].float(),
-            #                                 target[i][valid_target[i]][None].float(),
-            #                                 bidirectional=True).detach().cpu().item()
-            pred_pcd = prediction[i][valid_pred[i]]
-            target_pcd = target[i][valid_target[i]]
-            cd_forward = self.chamferDist(pred_pcd[None].float(),
-                                          target_pcd[None].float(),
-                                          point_reduction='mean').detach().cpu().item()
-            cd_backward = self.chamferDist(target_pcd[None].float(),
-                                           pred_pcd[None].float(),
-                                           point_reduction='mean').detach().cpu().item()
-            cdist += 0.5 * (cd_forward + cd_backward)
+            cost = self.cf(prediction[i][None], target[i][None])
+            cdist += cost.mean()
+
+            PC_RANGE = [-20.0, -20.0, -2, 20.0, 20.0, 6]
+            mask1 = torch.logical_and(PC_RANGE[0] <= prediction[i][:, 0],
+                                      prediction[i][:, 0] <= PC_RANGE[3])
+            mask2 = torch.logical_and(PC_RANGE[1] <= prediction[i][:, 1],
+                                      prediction[i][:, 1] <= PC_RANGE[4])
+            mask3 = torch.logical_and(PC_RANGE[2] <= prediction[i][:, 2],
+                                      prediction[i][:, 2] <= PC_RANGE[5])
+            inner_mask_pred = mask1 & mask2 & mask3
+            pred_inner = prediction[i][inner_mask_pred][None]
+
+            mask1 = torch.logical_and(PC_RANGE[0] <= target[i][:, 0],
+                                      target[i][:, 0] <= PC_RANGE[3])
+            mask2 = torch.logical_and(PC_RANGE[1] <= target[i][:, 1],
+                                      target[i][:, 1] <= PC_RANGE[4])
+            mask3 = torch.logical_and(PC_RANGE[2] <= target[i][:, 2],
+                                      target[i][:, 2] <= PC_RANGE[5])
+            inner_mask_gt = mask1 & mask2 & mask3
+            gt_inner = target[i][inner_mask_gt][None]
+            cost_in = self.cf(pred_inner, gt_inner)
+            cdist_in += cost_in.mean()
+
         self.total_cost += cdist / b
+        self.total_cost_in += cdist_in / b
         self.avg_cost = self.total_cost / self.count
+        self.avg_cost_in = self.total_cost_in / self.count
+
+    def cf(self, pred, gt):
+        try:
+            dist = torch.cdist(pred.float(), gt.float(), 2)
+            dl, dr = dist.min(1)[0], dist.min(2)[0]
+            cost = (self.reducer(dl, dim=1) + self.reducer(dr, dim=1)) / 2
+        except:
+            cost = torch.tensor([0], dtype=torch.float)
+        return cost
 
     def get_stat(self):
-        return self.avg_cost
+        return float(self.avg_cost), float(self.avg_cost_in)
 
     def reset(self):
         self.total_cost = 0
+        self.total_cost_in = 0
         self.count = 1e-8
         self.avg_cost = 0
+        self.avg_cost_in = 0
+
+
+# class CDMetric:
+#     def __init__(self, reducer=torch.mean):
+#         self.reducer = reducer
+#         self.reset()
+#
+#     def add_batch(self, prediction, target):
+#         self.count += 1
+#         # dist = CDLoss.batch_pairwise_dist(prediction.float(), target.float()).cpu().numpy()
+#         dist = torch.cdist(prediction.float(), target.float(), 2)
+#         dl, dr = dist.min(1)[0], dist.min(2)[0]
+#         cost = (self.reducer(dl, dim=1) + self.reducer(dr, dim=1)) / 2
+#         self.total_cost += cost.mean()
+#         self.avg_cost = self.total_cost / self.count
+#
+#     def get_stat(self):
+#         return float(self.avg_cost)
+#
+#     def reset(self):
+#         self.total_cost = 0
+#         self.count = 1e-8
+#         self.avg_cost = 0
+
+
+# class CDMetric0:
+#     def __init__(self):
+#         self.chamferDist = ChamferDistance()
+#         self.reset()
+#
+#     def add_batch(self, prediction, target, valid_pred, valid_target):
+#         self.count += 1
+#         b = prediction.shape[0]
+#         cdist = 0
+#         for i in range(b):
+#             # cdist += 0.5 * self.chamferDist(prediction[i][valid_pred[i]][None].float(),
+#             #                                 target[i][valid_target[i]][None].float(),
+#             #                                 bidirectional=True).detach().cpu().item()
+#             pred_pcd = prediction[i][valid_pred[i]]
+#             target_pcd = target[i][valid_target[i]]
+#             cd_forward = self.chamferDist(pred_pcd[None].float(),
+#                                           target_pcd[None].float(),
+#                                           point_reduction='mean').detach().cpu().item()
+#             cd_backward = self.chamferDist(target_pcd[None].float(),
+#                                            pred_pcd[None].float(),
+#                                            point_reduction='mean').detach().cpu().item()
+#             cdist += 0.5 * (cd_forward + cd_backward)
+#         self.total_cost += cdist / b
+#         self.avg_cost = self.total_cost / self.count
+#
+#     def get_stat(self):
+#         return self.avg_cost
+#
+#     def reset(self):
+#         self.total_cost = 0
+#         self.count = 1e-8
+#         self.avg_cost = 0
 
 
 class PSNRMetric:
@@ -309,7 +370,7 @@ class PSNRMetric:
         return psnr
 
     def get_stat(self):
-        return self.avg_psnr
+        return float(self.avg_psnr)
 
     def reset(self):
         self.total_psnr = 0

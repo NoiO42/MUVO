@@ -91,6 +91,7 @@ class Mile(nn.Module):
 
             # sensor type embedding
             self.type_embedding = nn.Parameter(torch.zeros(1, 1, self.cfg.MODEL.TRANSFORMER.CHANNELS, 2))
+            nn.init.uniform_(self.type_embedding)
 
             # transformer encoder
             self.encoder_layer = nn.TransformerEncoderLayer(
