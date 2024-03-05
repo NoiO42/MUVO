@@ -1,6 +1,6 @@
 # MUVO
 This is the PyTorch implementation for the paper
-> MUVO: A Multimodal Generative World Model for Autonomous Driving with Geometric Representations. <br/>
+> MUVO: A Multimodal World Model with Spatial Representations for Autonomous Driving. <br/>
 
 ## Requirements
 The simplest way to install all required dependencies is to create 
