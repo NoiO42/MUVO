@@ -89,6 +89,12 @@ In `config file(*.yml)`, you can set all the configs listed in `muvo/config.py`.
 Before training, make sure that the required input/output data as well as the model structure/dimensions are correctly set in `muvo/configs/your_config.yml`.
 
 ## test
+
+### weights
+
+We provide weights for pre-trained models, each was trained with around 100,000 steps. [weights](https://github.com/daniel-bogdoll/MUVO/releases/tag/1.0) is for a 1D latent space. [weights_2D](https://github.com/daniel-bogdoll/MUVO/releases/tag/2.0) for a 2D latent space. We provide config files for each: TODO
+
+### execute
 Run
 ```angular2html
 python prediction.py --config-file muvo/configs/prediction.yml
