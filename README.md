@@ -92,12 +92,15 @@ Before training, make sure that the required input/output data as well as the mo
 
 ### weights
 
-We provide weights for pre-trained models, each was trained with around 100,000 steps. [weights](https://github.com/daniel-bogdoll/MUVO/releases/tag/1.0) is for a 1D latent space. [weights_2D](https://github.com/daniel-bogdoll/MUVO/releases/tag/2.0) for a 2D latent space. We provide config files for each: TODO
+We provide weights for pre-trained models, and each was trained with around 100,000 steps. [weights](https://github.com/daniel-bogdoll/MUVO/releases/tag/1.0) is for a 1D latent space. [weights_2D](https://github.com/daniel-bogdoll/MUVO/releases/tag/2.0) for a 2D latent space. We provide config files for each:  <br/>  <br/> 
+'basic_voxel' in [weights_2D](https://github.com/daniel-bogdoll/MUVO/releases/tag/2.0) is for the basic 2D latent space model, which uses resnet18 as the backbone, without bev mapping for image features, uses range view for point cloud and uses the transformer to fuse features, the corresponding config file is '[test_base_2d.yml](https://github.com/daniel-bogdoll/MUVO/blob/main/muvo/configs/test_base_2d.yml)';  <br/>  <br/> 
+'mobilevit' weights just change the backbone compared to the 'basic_voxel' weights, the corresponding config file is '[test_mobilevit_2d.yml](https://github.com/daniel-bogdoll/MUVO/blob/main/muvo/configs/test_mobilevit_2d.yml)'; <br/>  <br/> 
+'RV_WOB_TR_1d_Voxel' and 'RV_WOB_TR_1d_no_Voxel' in [weights](https://github.com/daniel-bogdoll/MUVO/releases/tag/1.0) all use basic setting but use 1d latent space, '[test_base_1d.yml](https://github.com/daniel-bogdoll/MUVO/blob/main/muvo/configs/test_base_1d.yml)' and '[test_base_1d_without_voxel.yml](https://github.com/daniel-bogdoll/MUVO/blob/main/muvo/configs/test_base_1d_without_voxel.yml)' are corresponding config files.
 
 ### execute
 Run
 ```angular2html
-python prediction.py --config-file muvo/configs/prediction.yml
+python prediction.py --config-file muvo/configs/test.yml
 ```
 The config file is the same as in training.\
 In `file 'muvo/data/dataset.py', class 'DataModule', function 'setup'`, you can change the test dataset/sampler type.
