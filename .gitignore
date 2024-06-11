@@ -16,3 +16,5 @@ carla_gym/envs/__pycache__/__init__.cpython-38.pyc
 *.ipynb
 tensorboard_logs/
 env/
+
+.DS_Store

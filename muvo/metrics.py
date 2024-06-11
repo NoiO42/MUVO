@@ -5,7 +5,7 @@ Part of the code is taken from https://github.com/waterljwant/SSC/blob/master/ss
 """
 # import numpy as np
 import torch
-from chamferdist import ChamferDistance
+# from chamferdist import ChamferDistance
 # from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 
 from muvo.losses import SSIMLoss, CDLoss

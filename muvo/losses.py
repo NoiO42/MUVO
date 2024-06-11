@@ -5,6 +5,9 @@ from torch.cuda.amp import autocast
 
 from constants import SEMANTIC_SEG_WEIGHTS, VOXEL_SEG_WEIGHTS
 
+from datetime import datetime
+from matplotlib import pyplot as plt
+
 
 class SegmentationLoss(nn.Module):
     def __init__(self, use_top_k=False, top_k_ratio=1.0, use_weights=False, poly_one=False, poly_one_coefficient=0.0,
@@ -76,6 +79,7 @@ class SpatialRegressionLoss(nn.Module):
         super(SpatialRegressionLoss, self).__init__()
         self.norm = norm
         self.ignore_index = ignore_index
+        self.full_loss = None
 
         if norm == 1:
             self.loss_fn = F.l1_loss
@@ -95,6 +99,7 @@ class SpatialRegressionLoss(nn.Module):
 
         # Sum channel dimension
         loss = torch.sum(loss, dim=-3, keepdims=True)
+        self.full_loss = loss
 
         return loss[mask].mean()
 

@@ -52,16 +52,16 @@ def main():
     args = get_parser().parse_args()
     cfg = get_cfg(args)
 
-    # task = Task.init(project_name=cfg.CML_PROJECT, task_name=cfg.CML_TASK, task_type=cfg.CML_TYPE, tags=cfg.TAG)
-    # task.connect(cfg)
-    # cml_logger = task.get_logger()
-    #
-    # dataset_root = Dataset.get(dataset_project=cfg.CML_PROJECT,
-    #                            dataset_name=cfg.CML_DATASET,
-    #                            ).get_local_copy()
+    task = Task.init(project_name=cfg.CML_PROJECT, task_name=cfg.CML_TASK, task_type=cfg.CML_TYPE, tags=cfg.TAG)
+    task.connect(cfg)
+    cml_logger = task.get_logger()
+    
+    dataset_root = Dataset.get(dataset_project="dataset_project",
+                               dataset_name=cfg.CML_DATASET,
+                               ).get_local_copy()
 
-    # data = DataModule(cfg, dataset_root=dataset_root)
-    data = DataModule(cfg)
+    data = DataModule(cfg, dataset_root=dataset_root)
+    #data = DataModule(cfg)
 
     input_model = Model(model_id='').get_local_copy() if cfg.PRETRAINED.CML_MODEL else None
     # input_model = cfg.PRETRAINED.PATH

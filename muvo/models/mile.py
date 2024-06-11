@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import timm
+import numpy as np
 
 from constants import CARLA_FPS, DISPLAY_SEGMENTATION
 from muvo.utils.network_utils import pack_sequence_dim, unpack_sequence_dim, remove_past
@@ -11,8 +12,26 @@ from muvo.models.frustum_pooling import FrustumPooling
 from muvo.layers.layers import BasicBlock
 from muvo.models.transition import RSSM
 
+from PIL import Image
+import matplotlib
+import matplotlib.pyplot as plt
+
+from datetime import datetime
+
+def crop(array : np.ndarray):
+    for i in range(len(array)):
+        for j in range(len(array[0])):
+            for z in range(len(array[0][0])):
+                if(array[i][j][z] > 1):
+                    array[i][j][z] = 1.0
+                if(array[i][j][z] < 0):
+                    array[i][j][z] = 0.0
 
 class Mile(nn.Module):
+    prior_rgb_output = None
+    prior_raw_output = None
+    prior_batch = []
+
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
@@ -421,6 +440,8 @@ class Mile(nn.Module):
         b, s = batch['image'].shape[:2]
 
         output = dict()
+        RSSM.imagined_states = []
+        Mile.prior_batch = []
         if self.cfg.MODEL.TRANSITION.ENABLED:
             # Recurrent state sequence module
             if deployment:
@@ -435,6 +456,43 @@ class Mile(nn.Module):
 
             output = {**output, **state_dict}
             state = torch.cat([state_dict['posterior']['hidden_state'], state_dict['posterior']['sample']], dim=-1)
+            diff_state = torch.cat([
+                torch.abs(torch.sub(state_dict['posterior']['hidden_state'], state_dict['prior']['hidden_state'])),
+                torch.abs(torch.sub(state_dict['posterior']['sample'], state_dict['prior']['sample']))], dim=-1
+            )
+            diff_state = pack_sequence_dim(diff_state)
+            diff_rgb = self.rgb_decoder(diff_state)
+            diff_rgb = unpack_sequence_dim(diff_rgb, b, s)
+            print("length imagined:")
+            print(len(RSSM.imagined_states))
+            if(len(RSSM.imagined_states) == 12):
+                for i in range(1, len(RSSM.imagined_states) - 1):
+                    imagined_hidden_state = RSSM.imagined_states[i]['hidden_state'].cpu().numpy()
+                    imagined_sample = RSSM.imagined_states[i]['sample'].cpu().numpy()
+                    average_state = torch.cat([torch.from_numpy(imagined_hidden_state).to('cuda'),
+                                            torch.from_numpy(imagined_sample).to('cuda')], dim=-1)
+                    average_state = pack_sequence_dim(average_state)
+                    rgb_output = self.rgb_decoder(average_state)
+                    rgb_output = rgb_output['rgb_1']
+                    rgb_output = rgb_output.cpu().numpy()
+                    crop(rgb_output)
+                    r_data = rgb_output[0]
+                    g_data = rgb_output[1]
+                    b_data = rgb_output[2]
+                    Mile.prior_batch.append(np.dstack([r_data, g_data, b_data]))
+
+            
+            # Prior image
+            Mile.prior_rgb_output = unpack_sequence_dim(self.rgb_decoder(pack_sequence_dim(
+                torch.cat([state_dict['prior']['hidden_state'], state_dict['prior']['sample']], dim=-1)
+            )), b, s)['rgb_1'].cpu().numpy()[0]
+            Mile.prior_raw_output = unpack_sequence_dim(self.rgb_decoder(pack_sequence_dim(
+                torch.cat([state_dict['prior']['hidden_state'], state_dict['prior']['sample']], dim=-1)
+            )), b, s)['rgb_1']
+            for i in range(len(Mile.prior_rgb_output)):
+                prior_output = Mile.prior_rgb_output[i]
+                crop(prior_output)
+            
         else:
             state = embedding
             state_dict = {}

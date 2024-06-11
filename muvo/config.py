@@ -38,7 +38,7 @@ _C.CML_DATASET = ''
 
 _C.GPUS = 1  # how many gpus to use
 _C.PRECISION = '16-mixed'  # 16bit or 32bit
-_C.BATCHSIZE = 3
+_C.BATCHSIZE = 1
 _C.STEPS = 50000
 _C.N_WORKERS = 4
 
@@ -74,7 +74,7 @@ _C.SCHEDULER.PCT_START = 0.2
 _C.DATASET = CN()
 _C.DATASET.DATAROOT = ''
 _C.DATASET.VERSION = 'trainval'
-_C.DATASET.STRIDE_SEC = 0.2  # stride between two frames
+_C.DATASET.STRIDE_SEC = 0.1  # stride between two frames
 _C.DATASET.FILTER_BEGINNING_OF_RUN_SEC = 1.0  # in seconds. the beginning of the run is stationary.
 _C.DATASET.FILTER_NORM_REWARD = 0.6  # filter runs that have a normalised reward below this value.
 
@@ -329,6 +329,14 @@ def get_parser():
     parser.add_argument(
         'opts', help='Modify config options using the command-line', default=None, nargs=argparse.REMAINDER,
     )
+    parser.add_argument('--start', default=0, type=int, help='index of the first frame in the scenarios of the dataset')
+    parser.add_argument('--abs', default=0, type=float, help='weight for absolute error')
+    parser.add_argument('--temp', default=0, type=float, help='weigt for temporal difference')
+    parser.add_argument('--mse', default=0, type=float, help='weight for MSE')
+    parser.add_argument('--ssim', default=0, type=float, help='weigt for SSIM')
+    parser.add_argument('--per', default=0, type=float, help='weigt for perceptual difference')
+    parser.add_argument('--threshold', default=0, type=float, help='threshold for anomaly detection')
+    parser.add_argument('--dir', default=0, type=str, help='evaluation directory name')
     return parser
 
 

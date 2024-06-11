@@ -26,6 +26,8 @@ class RepresentationModel(nn.Module):
 
 
 class RSSM(nn.Module):
+    imagined_states = []
+
     def __init__(self, embedding_dim, action_dim, hidden_state_dim, state_dim, action_latent_dim, receptive_field,
                  use_dropout=False,
                  dropout_probability=0.0):
@@ -105,6 +107,8 @@ class RSSM(nn.Module):
         batch_size, sequence_length, _ = input_embedding.shape
         h_t = input_embedding.new_zeros((batch_size, self.hidden_state_dim))
         sample_t = input_embedding.new_zeros((batch_size, self.state_dim))
+        test_t = 0
+        test_y = 0
         for t in range(sequence_length):
             if t == 0:
                 action_t = torch.zeros_like(action[:, 0])
@@ -113,6 +117,23 @@ class RSSM(nn.Module):
             output_t = self.observe_step(
                 h_t, sample_t, action_t, input_embedding[:, t], use_sample=use_sample, policy=policy,
             )
+            test_t += 1
+            current_range = sequence_length - t
+
+            current_h = h_t
+            current_s = sample_t
+            current_a = action_t
+            imagine_t = None
+            test_y = test_t
+            for it in range(current_range - 1):
+                imagine_t = self.imagine_step(current_h, current_s, current_a)
+                current_h = imagine_t['hidden_state']
+                current_s = imagine_t['sample']
+                current_a = action[:, t+it-1]
+                test_y += 1
+            print("test_y: " + str(test_y))
+            RSSM.imagined_states.append(imagine_t)
+            
             # During training sample from the posterior, except when using dropout
             # always use posterior for the first frame
             use_prior = self.training and self.use_dropout and torch.rand(1).item() < self.dropout_probability and t > 0
@@ -122,9 +143,9 @@ class RSSM(nn.Module):
             else:
                 sample_t = output_t['posterior']['sample']
             h_t = output_t['prior']['hidden_state']
-
             for key, value in output_t.items():
                 output[key].append(value)
+        print("test_t: " + str(test_t))
 
         output = self.stack_list_of_dict_tensor(output, dim=1)
         return output

@@ -219,6 +219,50 @@ class PointCloud(object):
         range_sem[proj_h, proj_w] = semantics
         return range_depth, range_xyz, range_sem
 
+    def do_range_projection_w_o_sem(self, points):
+        # restore points coordinate to original carla's lidar.
+        points_carla = points * np.array([1, -1, 1])
+        points_carla -= self.lidar_position
+
+        depth = np.linalg.norm(points_carla, 2, axis=1)
+
+        x = points_carla[:, 0]
+        y = -points_carla[:, 1]  # carla-coor is left-hand.
+        z = points_carla[:, 2]
+
+        yaw = np.arctan2(y, x)
+        pitch = np.arcsin(z / depth)
+
+        proj_w = 0.5 * (1.0 - yaw / np.pi)
+        proj_h = 1.0 - (pitch + abs(self.fov_down)) / self.fov
+        proj_w *= self.W
+        proj_h *= self.H
+
+        proj_w = np.floor(proj_w)
+        proj_w = np.minimum(self.W - 1, proj_w)
+        proj_w = np.maximum(0, proj_w).astype(np.int32)
+
+        proj_h = np.floor(proj_h)
+        proj_h = np.minimum(self.H - 1, proj_h)
+        proj_h = np.maximum(0, proj_h).astype(np.int32)
+
+        # After sorting by depth from largest to smallest, close point will rewrite distant point in the same pixel.
+        order = np.argsort(depth)[::-1]
+        depth = depth[order]
+        proj_w = proj_w[order]
+        proj_h = proj_h[order]
+        points = points[order]
+
+        range_depth = np.full((self.H, self.W), -1, dtype=np.float32)
+        range_xyz = np.full((self.H, self.W, 3), 0, dtype=np.float32)
+
+        # points += self.lidar_position
+        # points[:, 1] *= -1
+
+        range_depth[proj_h, proj_w] = depth
+        range_xyz[proj_h, proj_w] = points
+        return range_depth, range_xyz
+
     # re-projection range-view pcd to original coordinate.
     def restore_pcd_coor(self, range_depth):
         h, w = np.arange(0, self.H), np.arange(0, self.W)
