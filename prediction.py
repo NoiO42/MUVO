@@ -152,7 +152,7 @@ def main():
             b_data = (Mile.prior_rgb_output[-1][2])
             prior_img = np.dstack([r_data, g_data, b_data])
             crop(prior_img)
-            np.save(MUVO_OUTPUT_PATH + eval_dir_name + '/prior/' + str(DataModule.initial_index) + "_" + str(runcounter) + '.png', prior_img)
+            np.save(MUVO_OUTPUT_PATH + eval_dir_name + '/prior/' + str(DataModule.initial_index) + "_" + str(runcounter), prior_img)
             print("Spatial regression loss: " + str(training_loss.cpu().numpy()))
             print("MSE: " + str(np.mean((img - prior_img) ** 2)))
             ssim_value, ssim_img = ssim(img, prior_img,data_range=np.max([np.max(img), np.max(prior_img)])
