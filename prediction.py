@@ -152,14 +152,14 @@ def main():
             b_data = (Mile.prior_rgb_output[-1][2])
             prior_img = np.dstack([r_data, g_data, b_data])
             crop(prior_img)
-            plt.imsave(MUVO_OUTPUT_PATH + eval_dir_name + '/prior/' + str(DataModule.initial_index) + "_" + str(runcounter) + '.png', prior_img)
+            np.save(MUVO_OUTPUT_PATH + eval_dir_name + '/prior/' + str(DataModule.initial_index) + "_" + str(runcounter) + '.png', prior_img)
             print("Spatial regression loss: " + str(training_loss.cpu().numpy()))
             print("MSE: " + str(np.mean((img - prior_img) ** 2)))
             ssim_value, ssim_img = ssim(img, prior_img,data_range=np.max([np.max(img), np.max(prior_img)])
                                          - np.min([np.min(img), np.min(prior_img)]), channel_axis=2, full=True)
             print("SSIM: " + str(ssim_value))
             temporal_diff_img = calculate_temporal_difference(prior_img, Mile.prior_batch)
-            np.save('/path_to_eval_file/' + eval_dir_name + '/temp/' + str(DataModule.initial_index) + "_" + str(runcounter), temporal_diff_img)
+            np.save(MUVO_OUTPUT_PATH + eval_dir_name + '/temp/' + str(DataModule.initial_index) + "_" + str(runcounter), temporal_diff_img)
             runcounter = runcounter + 1
             re = {'rgb_re': output['rgb_1'].detach().cpu().numpy(),
                   'pcd_re': output['lidar_reconstruction_1'].detach().cpu().numpy(),
